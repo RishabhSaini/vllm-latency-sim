@@ -13,7 +13,7 @@ from kv import ModelConfig, num_blocks_from_memory, max_concurrency
 from simulator import SchedulerConfig, Simulator
 from workload import make_workload
 
-# --- Model / hardware description ---
+# Model and hardware description
 cfg = ModelConfig(
     num_layers=32,
     num_kv_heads=8,      # GQA, per-GPU (TP=1)

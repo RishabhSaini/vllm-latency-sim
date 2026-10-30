@@ -74,7 +74,7 @@ class Simulator:
             scheduled: list[tuple[Request, int, int]] = []  # (req, n, need_before)
             preempted = False
 
-            # ---- PASS 1: RUNNING ----
+            # Pass 1: running requests
             i = 0
             while i < len(running) and token_budget > 0:
                 r = running[i]
@@ -94,7 +94,7 @@ class Simulator:
                     preempted = True
                     break
 
-            # ---- PASS 2: WAITING (only if no preemption this step) ----
+            # Pass 2: admit waiting requests (only if no preemption this step)
             if not preempted:
                 while (
                     waiting
@@ -128,7 +128,7 @@ class Simulator:
                     continue
                 break
 
-            # ---- COST MODEL: one forward pass ----
+            # Cost model: one forward pass
             C = sum(nt for _, nt, _ in scheduled)
             B = len(scheduled)
             S = sum(self._end_context(r, nt) for r, nt, _ in scheduled)
@@ -139,7 +139,7 @@ class Simulator:
             clock += dt
             steps += 1
 
-            # ---- UPDATE: advance state, sample, retire ----
+            # Update: advance state, sample, retire
             done_now = []
             for r, nt, need in scheduled:
                 r.computed += nt
@@ -160,7 +160,7 @@ class Simulator:
 
         return self._metrics(finished, clock, steps)
 
-    # ---- helpers ----
+    # Helpers
     def _end_context(self, r: Request, nt: int) -> int:
         cached_prefix = r.prompt_len - r.target_prefill
         return cached_prefix + r.computed + nt

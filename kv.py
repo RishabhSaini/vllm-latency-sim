@@ -120,7 +120,7 @@ class BlockManager:
             self.free += 1
         return self.free >= need
 
-    # ---- admission ----
+    # Admission
     def match_prefix(self, req) -> int:
         """Reference the longest cached block-prefix of `req`; return its tokens.
 
@@ -154,7 +154,7 @@ class BlockManager:
         reserve = self.watermark_blocks if is_admission else 0
         return need + reserve <= self.free + self._evictable()
 
-    # ---- growth / promotion ----
+    # Growth and promotion
     def grow(self, req, computed: int) -> None:
         rid = req.req_id
         if computed >= req.prompt_len and rid not in self.promoted:
@@ -193,7 +193,7 @@ class BlockManager:
                 self.owned[rid] -= 1
             refs.append(h)
 
-    # ---- release ----
+    # Release
     def release(self, req) -> None:
         rid = req.req_id
         for h in self.refs.get(rid, []):

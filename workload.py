@@ -21,11 +21,11 @@ class Request:
     prefix_hit_frac: float = 0.0  # flat-model fallback (ignored if block_hashes set)
     block_hashes: list[int] = field(default_factory=list)  # one per full prompt block
 
-    # --- mutable simulation state ---
+    # Mutable simulation state
     computed: int = 0             # tokens with KV computed (num_computed_tokens)
     produced: int = 0            # output tokens sampled so far
     status: str = "waiting"      # waiting | running | finished
-    ttft: float | None = None     # first output token time - arrival
+    ttft: float | None = None     # first output token time minus arrival
     token_times: list[float] = field(default_factory=list)  # decode timestamps
     finish_time: float | None = None
 

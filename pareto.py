@@ -7,7 +7,7 @@ non-dominated Pareto frontier. Writes `pareto.png` and `pareto.csv`.
     python pareto.py
 
 The frontier answers "for a given TTFT SLO, what is the most throughput I can
-get, and with which config?" -- the core capacity/cost question.
+get, and with which config?" That is the core capacity/cost question.
 """
 
 from __future__ import annotations
