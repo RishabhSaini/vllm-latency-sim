@@ -63,6 +63,22 @@ print(f"TTFT p50/99: {m['ttft_s']['p50']*1e3:.0f} / {m['ttft_s']['p99']*1e3:.0f}
 print(f"TPOT p50   : {m['tpot_s']['p50']*1e3:.1f} ms")
 ```
 
+## Pareto sweep
+
+Sweep request rate across scheduler configs and plot the throughput-vs-latency
+trade-off with the non-dominated frontier:
+
+```bash
+python pareto.py   # writes pareto.png and pareto.csv
+```
+
+![Throughput vs latency Pareto frontier](pareto.png)
+
+The frontier answers "for a given TTFT SLO, what is the most throughput I can get
+and with which config?" The example compares a tight vs. wide concurrency cap: the
+tight cap saturates earlier; the wide cap reaches higher throughput before its own
+latency knee, so the frontier switches configs past the SLO line.
+
 ## Calibrate against real vLLM (do this for real numbers)
 
 The seed model is roofline-only (~30% off). For accurate estimates, fit the

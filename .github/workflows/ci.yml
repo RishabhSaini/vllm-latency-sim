@@ -18,3 +18,5 @@ jobs:
         run: python test_smoke.py
       - name: Run demo
         run: python demo.py
+      - name: Render Pareto sweep (headless)
+        run: python pareto.py

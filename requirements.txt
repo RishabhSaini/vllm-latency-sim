@@ -1,1 +1,2 @@
 numpy>=1.24
+matplotlib>=3.7   # pareto.py only; the core simulator needs just numpy
