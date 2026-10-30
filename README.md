@@ -22,7 +22,45 @@ throughput vs. request rate.
 ## Quick start
 
 ```bash
+pip install -r requirements.txt
 python demo.py        # runs with an analytical seed cost model
+```
+
+## Usage example
+
+```python
+from kv import ModelConfig, num_blocks_from_memory
+from cost_model import CostModel
+from workload import make_workload
+from simulator import Simulator, SchedulerConfig
+
+# 1. Describe the model + hardware (Llama-3-8B-ish, TP=1).
+cfg = ModelConfig(num_layers=32, num_kv_heads=8, head_size=128,
+                  block_size=16, max_model_len=8192)
+
+# 2. Cost model: load a calibrated one, or use coefficients directly.
+#    cost = CostModel.load("cost_model.json")
+cost = CostModel(a=5e-4, b=3e-5, c=1e-4, d=4e-8)
+
+# 3. KV blocks from free memory (or read "# GPU blocks: N" from vLLM's log).
+num_blocks = num_blocks_from_memory(cfg, available_kv_bytes=int(50e9))
+
+# 4. Build a workload: 15 req/s, 2048-tok prompts, a shared 1536-tok prefix
+#    across 8 variants (emergent prefix-cache hits).
+reqs = make_workload(n=300, rate=15, burstiness=1.0,
+                     prompt_len=(2048, 128), output_len=(128, 64),
+                     num_prefix_groups=8, shared_prefix_len=1536,
+                     block_size=cfg.block_size, seed=0)
+
+# 5. Simulate and read the metrics.
+m = Simulator(cfg, SchedulerConfig(max_num_seqs=256,
+                                   max_num_batched_tokens=8192),
+              cost, num_blocks).run(reqs)
+
+print(f"throughput : {m['throughput_tok_s']:.0f} tok/s")
+print(f"prefix hit : {m['prefix_hit_rate']*100:.1f}%")
+print(f"TTFT p50/99: {m['ttft_s']['p50']*1e3:.0f} / {m['ttft_s']['p99']*1e3:.0f} ms")
+print(f"TPOT p50   : {m['tpot_s']['p50']*1e3:.1f} ms")
 ```
 
 ## Calibrate against real vLLM (do this for real numbers)
