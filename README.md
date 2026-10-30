@@ -1,25 +1,26 @@
 # vLLM latency simulator (no GPU)
 
-Predict how a vLLM server will behave — time-to-first-token, time-per-token,
-throughput, queueing — **without running a GPU**. It's a small pure-Python model
-of the vLLM v1 engine: it replays the real scheduler and KV-cache logic, and
+Predict how a vLLM server will behave (time-to-first-token, time-per-token,
+throughput, queueing) without running a GPU. It's a small pure-Python model of
+the vLLM v1 engine. It replays the real scheduler and KV-cache logic, and
 replaces only the GPU forward pass with a measured latency formula.
 
-Useful for capacity planning and cost/latency estimates: "at N requests/sec, what
-TTFT will users see, and how much throughput fits under my SLO?"
+Useful for capacity planning and cost/latency estimates. For example: at N
+requests/sec, what TTFT will users see, and how much throughput fits under my
+SLO?
 
 ## How it works
 
 Three moving parts, looped once per engine step:
 
-1. **Scheduler** — picks which requests run this step (token budget, concurrency
+1. **Scheduler** picks which requests run this step (token budget, concurrency
    cap, chunked prefill), exactly like vLLM's two-pass scheduler.
-2. **KV cache** — counts memory blocks with vLLM's real formulas; when they run
+2. **KV cache** counts memory blocks with vLLM's real formulas. When they run
    out, requests get preempted. Prefix caching is hash-based, so cache hits
-   *emerge* from the workload.
-3. **Cost model** — predicts each step's duration from the batch shape:
-   `t = a + b·C + c·B + d·S`. You fit the constants once to real GPU
-   measurements; everything else is exact bookkeeping.
+   emerge from the workload instead of being set by hand.
+3. **Cost model** predicts each step's duration from the batch shape:
+   `t = a + b*C + c*B + d*S`. You fit the constants once to real GPU
+   measurements. Everything else is exact bookkeeping.
 
 Latencies are just the clock summed over steps.
 
@@ -27,10 +28,10 @@ Latencies are just the clock summed over steps.
 
 ```bash
 pip install -r requirements.txt
-python demo.py        # rate sweep + a prefix-caching example
+python demo.py        # rate sweep plus a prefix-caching example
 ```
 
-It's fast — pure Python, **~6,000 simulated requests/sec** on one CPU core
+It's fast. Pure Python, about 6,000 simulated requests/sec on one CPU core
 (`python bench.py`), so sweeps and what-ifs are instant.
 
 ## Example
@@ -66,14 +67,15 @@ python calibrate.py fit shapes.csv cost_model.json
 
 `fit` tries two models and keeps the better one:
 
-- **linear** `t = a + b·C + c·B + d·S` — simple and interpretable.
-- **roofline** `t = max(compute, memory)` — more accurate near the
-  prefill/decode crossover (≈4% error vs ≈24% for linear on regime-split data).
+- **linear**, `t = a + b*C + c*B + d*S`, simple and interpretable.
+- **roofline**, `t = max(compute, memory)`, more accurate near the
+  prefill/decode crossover (about 4% error vs about 24% for linear on
+  regime-split data).
 
 Then sanity-check against a real `vllm bench serve` run at a couple of rates.
 
 Tip: you can skip the memory math and just read `# GPU blocks: N` from vLLM's
-startup log and pass it as `num_gpu_blocks`.
+startup log, then pass it as `num_gpu_blocks`.
 
 ## Pareto sweep
 
@@ -84,7 +86,7 @@ throughput-vs-latency trade-off with the best-choice frontier:
 
 ## What it doesn't model
 
-Recompute-only preemption (no CPU swap), a single engine (no pipeline/data
+Recompute-only preemption (no CPU swap), a single engine (no pipeline or data
 parallel overlap), and no speculative decoding. Arrivals are synthetic unless you
 feed a trace. These are the labeled extension points.
 
