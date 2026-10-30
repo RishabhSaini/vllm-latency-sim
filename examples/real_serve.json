@@ -1,0 +1,99 @@
+{
+  "model": "gemma-4-31B-it",
+  "hardware": "1x NVIDIA H200",
+  "dtype": "bf16",
+  "max_model_len": 8192,
+  "workload": {
+    "input_len": 512,
+    "output_len": 128,
+    "num_prompts": 200
+  },
+  "gpu_kv_cache_tokens": 75121,
+  "max_concurrency_x": 9.17,
+  "by_rate": [
+    {
+      "request_throughput": 1.953,
+      "output_throughput": 249.998,
+      "mean_ttft_ms": 553.174,
+      "median_ttft_ms": 87.362,
+      "p99_ttft_ms": 6519.428,
+      "mean_tpot_ms": 20.807,
+      "median_tpot_ms": 20.361,
+      "mean_itl_ms": 20.807,
+      "median_itl_ms": 19.018,
+      "mean_e2el_ms": 3195.709,
+      "median_e2el_ms": 2682.887,
+      "offered_rate": 2
+    },
+    {
+      "request_throughput": 3.812,
+      "output_throughput": 487.977,
+      "mean_ttft_ms": 107.237,
+      "median_ttft_ms": 91.949,
+      "p99_ttft_ms": 249.401,
+      "mean_tpot_ms": 23.44,
+      "median_tpot_ms": 23.265,
+      "mean_itl_ms": 23.44,
+      "median_itl_ms": 20.402,
+      "mean_e2el_ms": 3084.086,
+      "median_e2el_ms": 3070.961,
+      "offered_rate": 4
+    },
+    {
+      "request_throughput": 5.574,
+      "output_throughput": 713.457,
+      "mean_ttft_ms": 124.571,
+      "median_ttft_ms": 104.987,
+      "p99_ttft_ms": 275.45,
+      "mean_tpot_ms": 27.604,
+      "median_tpot_ms": 27.675,
+      "mean_itl_ms": 27.604,
+      "median_itl_ms": 22.134,
+      "mean_e2el_ms": 3630.328,
+      "median_e2el_ms": 3617.78,
+      "offered_rate": 6
+    },
+    {
+      "request_throughput": 7.195,
+      "output_throughput": 920.964,
+      "mean_ttft_ms": 153.227,
+      "median_ttft_ms": 136.936,
+      "p99_ttft_ms": 364.395,
+      "mean_tpot_ms": 34.053,
+      "median_tpot_ms": 34.29,
+      "mean_itl_ms": 34.053,
+      "median_itl_ms": 25.277,
+      "mean_e2el_ms": 4478.021,
+      "median_e2el_ms": 4504.749,
+      "offered_rate": 8
+    },
+    {
+      "request_throughput": 9.698,
+      "output_throughput": 1241.335,
+      "mean_ttft_ms": 260.634,
+      "median_ttft_ms": 237.668,
+      "p99_ttft_ms": 533.716,
+      "mean_tpot_ms": 58.016,
+      "median_tpot_ms": 57.836,
+      "mean_itl_ms": 58.016,
+      "median_itl_ms": 35.992,
+      "mean_e2el_ms": 7628.691,
+      "median_e2el_ms": 7482.446,
+      "offered_rate": 12
+    },
+    {
+      "request_throughput": 9.974,
+      "output_throughput": 1276.683,
+      "mean_ttft_ms": 1348.298,
+      "median_ttft_ms": 414.964,
+      "p99_ttft_ms": 4289.181,
+      "mean_tpot_ms": 70.666,
+      "median_tpot_ms": 79.331,
+      "mean_itl_ms": 70.666,
+      "median_itl_ms": 43.047,
+      "mean_e2el_ms": 10322.827,
+      "median_e2el_ms": 10373.987,
+      "offered_rate": 16
+    }
+  ]
+}
