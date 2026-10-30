@@ -132,7 +132,10 @@ class Simulator:
             C = sum(nt for _, nt, _ in scheduled)
             B = len(scheduled)
             S = sum(self._end_context(r, nt) for r, nt, _ in scheduled)
-            dt = self.cost.step_time(C, B, S)
+            # Attention feature: sum of chunk * context (quadratic for prefill,
+            # linear for decode). Ignored by the linear model.
+            A = sum(nt * self._end_context(r, nt) for r, nt, _ in scheduled)
+            dt = self.cost.step_time(C, B, S, A)
             clock += dt
             steps += 1
 

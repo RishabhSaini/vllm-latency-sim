@@ -12,7 +12,7 @@ throughput vs. request rate.
 
 | file | role |
 |------|------|
-| `cost_model.py` | `t_step = a + b·C + c·B + d·S [+ e·C²]` with least-squares `fit()` |
+| `cost_model.py` | two step-latency models with `fit()`: linear and regime-aware roofline |
 | `kv.py` | KV-block accounting using vLLM's real page/block/concurrency math |
 | `workload.py` | gamma/Poisson arrivals + prompt/output length sampling |
 | `simulator.py` | the discrete-event scheduler + step loop |
@@ -78,6 +78,21 @@ The frontier answers "for a given TTFT SLO, what is the most throughput I can ge
 and with which config?" The example compares a tight vs. wide concurrency cap: the
 tight cap saturates earlier; the wide cap reaches higher throughput before its own
 latency knee, so the frontier switches configs past the SLO line.
+
+## Cost models: linear vs. roofline
+
+Two interchangeable step-latency models (same `step_time(C, B, S, A)` signature):
+
+- **`CostModel`** (linear): `t = a + b·C + c·B + d·S`. Simple, interpretable,
+  calibratable from few points. Smears the prefill/decode crossover into one line.
+- **`RooflineCostModel`** (regime-aware): `t = max(compute, memory)` with an
+  attention feature `A = Σ chunkᵢ·contextᵢ` (quadratic for prefill, linear for
+  decode). Fit by alternating segmented regression. More accurate near the
+  compute/memory crossover and for long context.
+
+`calibrate.py fit` fits both and keeps the lower-MAPE one; the simulator uses
+either transparently. On regime-split data the roofline model recovers the
+generating function to ~4% MAPE where the linear fit is ~24%.
 
 ## Calibrate against real vLLM (do this for real numbers)
 

@@ -6,7 +6,9 @@ pytest. No GPU, no heavyweight deps beyond numpy.
 
 from __future__ import annotations
 
-from cost_model import CostModel
+import numpy as np
+
+from cost_model import CostModel, RooflineCostModel
 from kv import ModelConfig
 from simulator import SchedulerConfig, Simulator
 from workload import make_workload
@@ -57,8 +59,42 @@ def test_prefix_cache_reduces_ttft():
     assert warm["ttft_s"]["p99"] < cold["ttft_s"]["p99"]
 
 
+def test_roofline_beats_linear_on_regime_split_data():
+    # Data from a two-regime roofline model: the roofline fit should recover it
+    # far better than a single line, which smears the compute/memory crossover.
+    true = RooflineCostModel(cc0=3e-4, cc_C=2.5e-5, cc_A=1e-9,
+                             mc0=2e-3, mc_B=5e-5, mc_S=3e-8)
+    rng = np.random.default_rng(0)
+    C, B, S, A, t = [], [], [], [], []
+    for _ in range(120):
+        if rng.random() < 0.5:  # decode (memory-bound)
+            b = int(rng.integers(1, 256)); ctx = int(rng.integers(128, 8192))
+            c, s, a = b, b * ctx, b * ctx
+        else:                   # prefill (compute-bound)
+            c = int(rng.integers(128, 8192)); b = 1; s = c; a = c * c
+        C.append(c); B.append(b); S.append(s); A.append(a)
+        t.append(true.step_time(c, b, s, a) * (1 + rng.normal(0, 0.04)))
+    arrs = [np.array(x) for x in (C, B, S, A, t)]
+    _, lin_d = CostModel.fit(arrs[0], arrs[1], arrs[2], arrs[4])
+    _, roof_d = RooflineCostModel.fit(*arrs)
+    assert roof_d["mape"] < lin_d["mape"]
+    assert roof_d["mape"] < 0.1  # recovers the generating model closely
+
+
+def test_simulator_runs_with_roofline_model():
+    cost = RooflineCostModel(cc0=3e-4, cc_C=2.5e-5, cc_A=1e-9,
+                             mc0=2e-3, mc_B=5e-5, mc_S=3e-8)
+    reqs = make_workload(n=120, rate=12, prompt_len=(512, 128),
+                         output_len=(96, 32), seed=1)
+    m = Simulator(CFG, SchedulerConfig(), cost, 20000).run(reqs)
+    assert m["n_requests"] == 120
+    assert m["throughput_tok_s"] > 0
+
+
 if __name__ == "__main__":
     test_all_requests_drain_and_metrics_are_sane()
     test_block_accounting_invariant_under_pressure()
     test_prefix_cache_reduces_ttft()
+    test_roofline_beats_linear_on_regime_split_data()
+    test_simulator_runs_with_roofline_model()
     print("all smoke tests passed")

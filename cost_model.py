@@ -42,13 +42,15 @@ class CostModel:
     d: float = 0.0  # per unit of summed context (KV read)
     e: float = 0.0  # optional C^2 attention term (0 => disabled)
 
-    def step_time(self, C: float, B: float, S: float) -> float:
+    def step_time(self, C: float, B: float, S: float, A: float = 0.0) -> float:
         """Predicted wall time (s) for one forward step of this shape.
 
         Args:
             C: Total query rows scheduled this step.
             B: Number of scheduled requests.
             S: Sum of context lengths over scheduled requests.
+            A: Attention feature (ignored by this model; present so the linear
+                and roofline models share one call signature).
 
         Returns:
             Predicted step latency in seconds (floored at a small positive
@@ -103,9 +105,112 @@ class CostModel:
 
     def save(self, path: str) -> None:
         with open(path, "w") as f:
-            json.dump(asdict(self), f, indent=2)
+            json.dump({"kind": "linear", **asdict(self)}, f, indent=2)
 
     @classmethod
     def load(cls, path: str) -> "CostModel":
         with open(path) as f:
-            return cls(**json.load(f))
+            d = json.load(f)
+        d.pop("kind", None)
+        return cls(**d)
+
+
+@dataclass
+class RooflineCostModel:
+    """Regime-aware model: t = overhead + max(compute_time, memory_time).
+
+    A transformer step is compute-bound (prefill) or memory-bound (decode); the
+    true cost is the max of the two, not a single line. Each branch is affine:
+
+        compute_time = cc0 + cc_C * C + cc_A * A
+        memory_time  = mc0 + mc_B * B + mc_S * S
+
+    where A = sum over scheduled requests of (chunk_i * context_i) is the
+    attention feature. For a decode token (chunk=1) A contributes context_i
+    (linear); for a prefill chunk of n tokens over context c it contributes n*c
+    (the quadratic the linear model misses). Fit with `fit()` (alternating
+    segmented regression, numpy only).
+    """
+
+    cc0: float = 0.0
+    cc_C: float = 0.0
+    cc_A: float = 0.0
+    mc0: float = 0.0
+    mc_B: float = 0.0
+    mc_S: float = 0.0
+
+    def step_time(self, C: float, B: float, S: float, A: float = 0.0) -> float:
+        tc = self.cc0 + self.cc_C * C + self.cc_A * A
+        tm = self.mc0 + self.mc_B * B + self.mc_S * S
+        return max(tc, tm, 1e-6)
+
+    @classmethod
+    def fit(
+        cls,
+        C: np.ndarray,
+        B: np.ndarray,
+        S: np.ndarray,
+        A: np.ndarray,
+        t: np.ndarray,
+        max_iter: int = 50,
+    ) -> tuple["RooflineCostModel", dict]:
+        """Fit the two affine branches by alternating assignment.
+
+        Each point is assigned to whichever branch currently predicts the larger
+        time; branches are re-fit on their assigned points until the assignment
+        stops changing (a few iterations in practice).
+        """
+        C, B, S, A, t = (np.asarray(x, float).ravel() for x in (C, B, S, A, t))
+        Xc = np.stack([np.ones_like(C), C, A], axis=1)
+        Xm = np.stack([np.ones_like(C), B, S], axis=1)
+        # Init: more tokens than requests => likely compute (prefill) bound.
+        compute = C > B
+
+        def _ls(X, y):
+            coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+            return coef
+
+        bc = _ls(Xc, t)
+        bm = _ls(Xm, t)
+        for _ in range(max_iter):
+            if compute.sum() >= 3:
+                bc = _ls(Xc[compute], t[compute])
+            if (~compute).sum() >= 3:
+                bm = _ls(Xm[~compute], t[~compute])
+            new_compute = (Xc @ bc) >= (Xm @ bm)
+            if np.array_equal(new_compute, compute):
+                break
+            compute = new_compute
+
+        model = cls(cc0=float(bc[0]), cc_C=float(bc[1]), cc_A=float(bc[2]),
+                    mc0=float(bm[0]), mc_B=float(bm[1]), mc_S=float(bm[2]))
+        pred = np.maximum(Xc @ bc, Xm @ bm)
+        resid = t - pred
+        ss_tot = float(np.sum((t - t.mean()) ** 2)) or 1.0
+        ape = np.abs(resid) / np.clip(np.abs(t), 1e-9, None)
+        diag = {
+            "r2": 1.0 - float(np.sum(resid**2)) / ss_tot,
+            "mape": float(np.mean(ape)),
+            "p95_ape": float(np.percentile(ape, 95)),
+            "n": int(len(t)),
+            "compute_frac": float(compute.mean()),
+        }
+        return model, diag
+
+    def save(self, path: str) -> None:
+        with open(path, "w") as f:
+            json.dump({"kind": "roofline", **asdict(self)}, f, indent=2)
+
+    @classmethod
+    def load(cls, path: str) -> "RooflineCostModel":
+        with open(path) as f:
+            d = json.load(f)
+        d.pop("kind", None)
+        return cls(**d)
+
+
+def load_cost_model(path: str):
+    """Load either model type, dispatching on the saved ``kind`` tag."""
+    with open(path) as f:
+        kind = json.load(f).get("kind", "linear")
+    return RooflineCostModel.load(path) if kind == "roofline" else CostModel.load(path)
