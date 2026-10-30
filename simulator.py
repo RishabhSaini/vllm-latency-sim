@@ -30,6 +30,13 @@ class SchedulerConfig:
     enable_chunked_prefill: bool = True
     long_prefill_token_threshold: int = 0   # 0 => no single-chunk cap
     policy: str = "fcfs"                     # "fcfs" | "priority"
+    # Fixed per-request latency outside the batched forward (tokenization,
+    # request handling, detokenization/stream setup). Added to TTFT and E2E.
+    request_overhead_s: float = 0.0
+    # Keep this many free KV blocks per running request before admitting a new
+    # one, so the engine does not over-admit into a preemption spiral under
+    # memory pressure. 0 reproduces the old greedy admission.
+    admission_headroom_blocks_per_running: float = 0.0
 
 
 class Simulator:
@@ -51,6 +58,8 @@ class Simulator:
         n = len(reqs)
         next_idx = 0
         clock = 0.0
+        self.preemptions = 0
+        self.max_running = 0
         waiting: deque[Request] = deque()
         running: list[Request] = []
         finished: list[Request] = []
@@ -101,6 +110,12 @@ class Simulator:
                     and len(running) < self.sched.max_num_seqs
                     and token_budget > 0
                 ):
+                    # Keep headroom so running requests can grow next step instead
+                    # of over-admitting into a preemption spiral.
+                    reserve = int(self.sched.admission_headroom_blocks_per_running
+                                  * len(running))
+                    if reserve and self.blocks.free <= reserve:
+                        break
                     r = waiting[0]
                     if r.computed == 0:  # fresh admission: reuse cached prefix
                         r.computed = self.blocks.match_prefix(r)
@@ -127,6 +142,8 @@ class Simulator:
                     clock = max(clock, reqs[next_idx].arrival)
                     continue
                 break
+
+            self.max_running = max(self.max_running, len(running))
 
             # Cost model: one forward pass
             C = sum(nt for _, nt, _ in scheduled)
@@ -172,6 +189,7 @@ class Simulator:
         return running[-1]  # FCFS preempts the most-recently-added
 
     def _preempt(self, victim: Request, running: list[Request], waiting: deque) -> None:
+        self.preemptions += 1
         running.remove(victim)
         self.blocks.release(victim)
         victim.computed = 0
@@ -182,13 +200,14 @@ class Simulator:
         waiting.appendleft(victim)  # recompute from scratch, keep ahead of fresh
 
     def _metrics(self, finished: list[Request], makespan: float, steps: int) -> dict:
-        ttft = np.array([r.ttft for r in finished if r.ttft is not None])
+        oh = self.sched.request_overhead_s
+        ttft = np.array([r.ttft + oh for r in finished if r.ttft is not None])
         tpot = []
         for r in finished:
             if r.produced > 1:
                 tpot.append((r.token_times[-1] - r.token_times[0]) / (r.produced - 1))
         tpot = np.array(tpot)
-        e2e = np.array([r.finish_time - r.arrival for r in finished])
+        e2e = np.array([r.finish_time - r.arrival + oh for r in finished])
         out_tokens = sum(r.produced for r in finished)
 
         def pct(a):
@@ -208,6 +227,8 @@ class Simulator:
             "output_tokens": out_tokens,
             "throughput_tok_s": out_tokens / makespan if makespan > 0 else 0.0,
             "prefix_hit_rate": self.blocks.hit_rate(),
+            "preemptions": self.preemptions,
+            "max_running": self.max_running,
             "ttft_s": pct(ttft),
             "tpot_s": pct(tpot),       # inter-token latency (decode)
             "e2e_s": pct(e2e),

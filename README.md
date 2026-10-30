@@ -84,6 +84,19 @@ throughput-vs-latency trade-off with the best-choice frontier:
 
 ![Throughput vs latency Pareto frontier](pareto.png)
 
+## Tuning knobs for realism
+
+`SchedulerConfig` has two options for matching a real deployment:
+
+- `request_overhead_s`: fixed per-request latency outside the batched forward
+  (tokenization, request handling). Added to TTFT and E2E. Calibrate from the
+  low-load TTFT gap.
+- `admission_headroom_blocks_per_running`: keep this many free KV blocks per
+  running request before admitting a new one, so the engine holds requests in
+  the queue instead of over-admitting into a preemption spiral under overload.
+
+`metrics` also reports `preemptions` and `max_running` for diagnosing saturation.
+
 ## What it doesn't model
 
 Recompute-only preemption (no CPU swap), a single engine (no pipeline or data

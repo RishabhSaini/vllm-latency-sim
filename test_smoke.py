@@ -91,10 +91,35 @@ def test_simulator_runs_with_roofline_model():
     assert m["throughput_tok_s"] > 0
 
 
+def test_request_overhead_shifts_ttft_and_e2e():
+    base = _run(20000, n=100, rate=4, prompt_len=(512, 20),
+                output_len=(96, 5), seed=1)[1]
+    sim = Simulator(CFG, SchedulerConfig(request_overhead_s=0.05), COST, 20000)
+    oh = sim.run(make_workload(n=100, rate=4, prompt_len=(512, 20),
+                               output_len=(96, 5), seed=1))
+    assert abs((oh["ttft_s"]["mean"] - base["ttft_s"]["mean"]) - 0.05) < 1e-6
+    assert abs((oh["e2e_s"]["mean"] - base["e2e_s"]["mean"]) - 0.05) < 1e-6
+    assert abs(oh["tpot_s"]["mean"] - base["tpot_s"]["mean"]) < 1e-9  # TPOT unaffected
+
+
+def test_admission_headroom_prevents_preemption_spiral():
+    # Heavy overload on a small pool: headroom should cut preemptions and keep
+    # throughput from collapsing.
+    wl = dict(n=200, rate=40, prompt_len=(512, 20), output_len=(128, 5), seed=1)
+    greedy = Simulator(CFG, SchedulerConfig(admission_headroom_blocks_per_running=0.0),
+                       COST, 2500).run(make_workload(**wl))
+    guarded = Simulator(CFG, SchedulerConfig(admission_headroom_blocks_per_running=2.0),
+                        COST, 2500).run(make_workload(**wl))
+    assert guarded["preemptions"] <= greedy["preemptions"]
+    assert guarded["throughput_tok_s"] >= greedy["throughput_tok_s"]
+
+
 if __name__ == "__main__":
     test_all_requests_drain_and_metrics_are_sane()
     test_block_accounting_invariant_under_pressure()
     test_prefix_cache_reduces_ttft()
     test_roofline_beats_linear_on_regime_split_data()
     test_simulator_runs_with_roofline_model()
+    test_request_overhead_shifts_ttft_and_e2e()
+    test_admission_headroom_prevents_preemption_spiral()
     print("all smoke tests passed")
