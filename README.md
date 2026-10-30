@@ -77,6 +77,15 @@ Then sanity-check against a real `vllm bench serve` run at a couple of rates.
 Tip: you can skip the memory math and just read `# GPU blocks: N` from vLLM's
 startup log, then pass it as `num_gpu_blocks`.
 
+## Validated on real hardware
+
+Checked against a real vLLM server (gemma-4-31B-it on one H200): throughput and
+all latency metrics match within ~6% before saturation, and throughput stays
+accurate past it. See [`examples/`](examples/) for the calibrated model, the real
+measurements, and a self-contained `compare.py` that reproduces the chart.
+
+![real vs simulator](examples/latency_compare.png)
+
 ## Pareto sweep
 
 `python pareto.py` sweeps request rate across configs and plots the
